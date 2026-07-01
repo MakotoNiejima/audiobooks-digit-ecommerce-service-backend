@@ -22,6 +22,12 @@ def user_headers(state: DialogueState) -> dict[str, str]:
     return {}
 
 
+def bound_user_id(state: DialogueState) -> str | None:
+    """当前演示项目直接把数字 sender_id 作为业务用户 ID。"""
+    sender_id = (state.sender_id or "").strip()
+    return sender_id if sender_id.isdigit() else None
+
+
 def _extract_data(result: Any) -> dict | None:
     data = result.get("data") if isinstance(result, dict) else None
     return data if isinstance(data, dict) else None
@@ -71,6 +77,33 @@ async def fetch_order(state: DialogueState, order_number: str) -> dict | None:
     except Exception:
         pass
     return None
+
+
+async def fetch_orders(
+        state: DialogueState,
+        *,
+        page_size: int = 3,
+        order_status: str | None = None,
+) -> list[dict] | None:
+    """查询当前绑定用户的最近订单；None 表示身份或服务异常。"""
+    if bound_user_id(state) is None:
+        return None
+
+    params: dict[str, Any] = {"pageNo": 1, "pageSize": page_size}
+    if order_status:
+        params["orderStatus"] = order_status
+
+    try:
+        r = await http_client.http_client.get(
+            f"{_base_url()}/api/v1/orders",
+            params=params,
+            headers=user_headers(state),
+        )
+        if r.status_code != 200:
+            return None
+        return _extract_list(r.json())
+    except Exception:
+        return None
 
 
 async def fetch_listening_progress(state: DialogueState, album_id: int | None = None) -> list[dict]:

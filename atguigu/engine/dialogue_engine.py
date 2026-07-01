@@ -11,7 +11,7 @@ from atguigu.chitchat.handler import ChitChatHandler
 from atguigu.task.flow.flows import FlowsList
 from atguigu.plan.validator import TurnPlanValidator
 from atguigu.clarify.responder import ClarifyResponser
-from atguigu.task.command.commands import Command, SetSlotsCommand
+from atguigu.task.command.commands import Command, SetSlotsCommand, CancelFlowCommand, StartedFlowCommand
 from atguigu.task.flow.steps import CollectFlowStep
 from atguigu.plan.turn_plan import ClarifyReason
 
@@ -140,6 +140,12 @@ class DialogueEngine:
         调用LLM（1.给LLM什么数据 2.获取什么的数据）prompt的提示词---->程序自己根据业务定义的
         """
 
+        # 退款流程已经明确进入“收集退款原因”时，默认把用户文本作为退款原因。
+        # 只有用户明确说取消退款，才继续交给 Planner 生成 cancel_flow。
+        collect_command = self._resolve_collect_text_command(user_message, state, flow_list)
+        if collect_command is not None:
+            return await self.task_handler.hand(state, [collect_command], emitter=emitter)
+
         # 1. 路由分析规划结果
         turn_plan = await self.planner.predict(user_message, state=state, flow_list=flow_list, intents=intents)
 
@@ -173,6 +179,31 @@ class DialogueEngine:
         :param state:
         :return:
         """
+
+        explicit_action = (obj_msg.attributes or {}).get("action")
+        if obj_msg.type == "order" and explicit_action in {"query", "refund"}:
+            target_flow = "order_query" if explicit_action == "query" else "refund_request"
+            return await self.task_handler.hand(
+                state,
+                commands=[
+                    StartedFlowCommand(command="start_flow", flow=target_flow),
+                    SetSlotsCommand(command="set_slots", slots={"order_number": obj_msg.id}),
+                ],
+                emitter=emitter,
+            )
+
+        current_collect_step = self._current_collect_step(state, flow_list)
+        if (obj_msg.type == "order"
+                and current_collect_step is not None
+                and current_collect_step.slot_name != "order_number"):
+            prompt_by_slot = {
+                "refund_reason": "退款订单已经选好了，请直接说明退款原因。",
+                "refund_type": "退款订单已经选好了，请选择全额退款或部分退款。",
+            }
+            return [BotMessage(text=prompt_by_slot.get(
+                current_collect_step.slot_name,
+                "当前步骤不需要重新选择订单，请继续填写当前信息。",
+            ))]
 
         # 1. 解析对象成为SetSlotsCommand
         command = self._resolve_object_command(
@@ -237,9 +268,54 @@ class DialogueEngine:
         if activated_task.slots.get(slot_name):
             return False
 
-        # 4. 判断你点击的卡片是不是当前step正在收集的槽位 （当前正在收集的槽位是refund_reason，点击了卡片）
-        for step in flow.steps:
-            if isinstance(step, CollectFlowStep) and step.slot_name == slot_name:
-                return True
+        # 4. 只允许给“当前正在收集”的槽位赋值，不能因为流程中曾经出现过
+        # order_number，就在收集退款原因时再次处理订单卡片。
+        current_step = flow.get_step_by_id(activated_task.step_id)
+        return isinstance(current_step, CollectFlowStep) and current_step.slot_name == slot_name
 
-        return False
+    def _resolve_collect_text_command(self,
+                                      user_message: UserMessage,
+                                      state: DialogueState,
+                                      flow_list: FlowsList) -> Command | None:
+        step = self._current_collect_step(state, flow_list)
+        text = (user_message.text or "").strip()
+        if step is None or not text:
+            return None
+
+        active_task = state.active_task
+        if (active_task is not None
+                and active_task.flow_id == "refund_request"
+                and self._is_explicit_refund_cancel(text)):
+            return CancelFlowCommand(command="cancel_flow", flow="refund_request")
+
+        if step.slot_name == "refund_reason":
+            return SetSlotsCommand(command="set_slots", slots={"refund_reason": text})
+
+        return None
+
+    @staticmethod
+    def _current_collect_step(state: DialogueState,
+                              flow_list: FlowsList) -> CollectFlowStep | None:
+        active_task = state.active_task
+        if active_task is None:
+            return None
+        flow = flow_list.get_flow_by_id(active_task.flow_id)
+        if flow is None:
+            return None
+        step = flow.get_step_by_id(active_task.step_id)
+        return step if isinstance(step, CollectFlowStep) else None
+
+    @staticmethod
+    def _is_explicit_refund_cancel(text: str) -> bool:
+        normalized = "".join(text.split()).rstrip("。！!？?")
+        return normalized in {
+            "取消退款",
+            "我要取消退款",
+            "我想取消退款",
+            "撤销退款",
+            "撤销退款申请",
+            "不退了",
+            "我不退了",
+            "不申请退款了",
+            "停止退款",
+        }

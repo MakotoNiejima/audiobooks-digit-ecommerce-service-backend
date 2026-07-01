@@ -24,6 +24,16 @@ slots:
     label: 订单摘要
     description: 订单金额、购买内容等摘要信息
 
+  order_candidates_available:
+    type: boolean
+    label: 是否有候选订单
+    description: 当前用户是否有可供选择的订单
+
+  order_found:
+    type: boolean
+    label: 是否查到订单
+    description: 指定订单是否存在且属于当前用户
+
   book_name:
     type: text
     label: 书名
@@ -48,6 +58,11 @@ slots:
     type: text
     label: 退款结果
     description: 退款申请的处理结果
+
+  refund_order_valid:
+    type: boolean
+    label: 退款订单是否有效
+    description: 订单是否通过退款前置检查
 
   ticket_category:
     type: text
@@ -90,19 +105,43 @@ flows:
     steps:
       - id: start
         type: start
-        next: ask_order_number
+        next: list_user_orders
+
+      - id: list_user_orders
+        type: action
+        action: action_list_user_orders
+        args:
+          refundable_only: false
+        next: decide_order_input
+
+      # Action 执行后再通过这个判断节点读取它写入的槽位。
+      - id: decide_order_input
+        type: start
+        next:
+          - if: "slots.get('order_number')"
+            then: lookup_order
+          - if: "slots.get('order_candidates_available')"
+            then: ask_order_number
+          - else: end
 
       - id: ask_order_number
         type: collect
         slot_name: order_number
         response:
-          text: "请告诉我你的订单号（订单 ID 或 ORD 开头的订单号）。"
+          text: "请点击上面的订单卡片，或者输入订单 ID / ORD 开头的订单号。"
         next: lookup_order
 
       - id: lookup_order
         type: action
         action: action_lookup_order
-        next: show_order
+        next: decide_order_result
+
+      - id: decide_order_result
+        type: start
+        next:
+          - if: "slots.get('order_found')"
+            then: show_order
+          - else: end
 
       - id: show_order
         type: action
@@ -150,14 +189,42 @@ flows:
     steps:
       - id: start
         type: start
-        next: ask_order_number
+        next: list_refundable_orders
+
+      - id: list_refundable_orders
+        type: action
+        action: action_list_user_orders
+        args:
+          refundable_only: true
+        next: decide_refund_order_input
+
+      - id: decide_refund_order_input
+        type: start
+        next:
+          - if: "slots.get('order_number')"
+            then: check_refund_order
+          - if: "slots.get('order_candidates_available')"
+            then: ask_order_number
+          - else: end
 
       - id: ask_order_number
         type: collect
         slot_name: order_number
         response:
-          text: "请告诉我你要退款的订单号。"
-        next: ask_refund_reason
+          text: "请选择上面的订单卡片，或者输入你要退款的订单号。"
+        next: check_refund_order
+
+      - id: check_refund_order
+        type: action
+        action: action_check_refund_order
+        next: decide_refund_order
+
+      - id: decide_refund_order
+        type: start
+        next:
+          - if: "slots.get('refund_order_valid')"
+            then: ask_refund_reason
+          - else: end
 
       - id: ask_refund_reason
         type: collect

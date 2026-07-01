@@ -1,18 +1,64 @@
 import uuid
 import json
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from atguigu.api.dependencies import DialogueServiceDep
 from atguigu.api.schemas import ChatRequest, ChatResponse, ChatBotMessage, ChatObject,ChatMessageResponse
 from atguigu.domain.messages import ProcessResult, UserMessage, MessageType, FocusedObject,ChatHistoryMessage
+from atguigu.domain.state import DialogueState
+from atguigu.task.action.customer.shared import fetch_orders
 
 
 router = APIRouter()
+
+ORDER_STATUS_CN = {
+    "created": "待支付",
+    "paying": "支付中",
+    "paid": "已支付",
+    "cancelled": "已取消",
+    "refunding": "退款中",
+    "refunded": "已退款",
+}
 
 
 @router.get("/hello")
 async def hello():
     return {"success": "ok"}
+
+
+@router.get("/api/orders/recent")
+async def recent_orders(sender_id: str, limit: int = Query(default=5, ge=1, le=10)):
+    """返回当前数字用户最近的订单，供前端订单面板展示。"""
+    if not sender_id.isdigit():
+        raise HTTPException(status_code=400, detail="当前会话没有绑定数字业务用户 ID")
+
+    orders = await fetch_orders(DialogueState(sender_id=sender_id), page_size=limit)
+    if orders is None:
+        raise HTTPException(status_code=503, detail="订单服务暂时不可用")
+
+    result = []
+    for order in orders:
+        raw_status = str(order.get("orderStatus") or "")
+        order_id = str(order.get("orderId") or "")
+        order_no = str(order.get("orderNo") or order_id)
+        result.append({
+            "id": order_id,
+            "type": "order",
+            "title": order_no,
+            "attributes": {
+                "orderNo": order_no,
+                "status": ORDER_STATUS_CN.get(raw_status, raw_status),
+                "statusRaw": raw_status,
+                "amount": order.get("payableAmount"),
+                "orderType": order.get("orderType"),
+                "itemName": order.get("firstItemName"),
+                "itemCount": order.get("itemCount"),
+                "createdAt": order.get("createdAt"),
+                "refundable": raw_status == "paid",
+            },
+        })
+
+    return {"sender_id": sender_id, "orders": result}
 
 
 @router.post("/api/chat", response_model=ChatResponse)

@@ -1,8 +1,9 @@
 from typing import Any
 
+from atguigu.domain.messages import BotMessage
 from atguigu.domain.state import DialogueState
 from atguigu.task.action.base import Action, ActionResult
-from atguigu.task.action.customer.shared import fetch_order
+from atguigu.task.action.customer.shared import bound_user_id, fetch_order
 
 
 ORDER_STATUS_CN = {
@@ -20,13 +21,20 @@ class LookupOrderAction(Action):
 
     async def run(self, state: DialogueState, action_args: dict[str, Any]) -> ActionResult:
         order_number = state.active_task.slots.get("order_number")
+
+        if bound_user_id(state) is None:
+            return ActionResult(
+                messages=[BotMessage(text="当前会话没有绑定业务用户，请使用数字用户 ID 登录后再查询订单。")],
+                slot_updates={"order_found": False},
+            )
+
         payload = await fetch_order(state, order_number)
 
         if payload is None or not payload.get("order"):
-            return ActionResult(slot_updates={
-                "order_status": "未知",
-                "order_summary": f"没有查到订单 {order_number}，请确认订单号是否正确。",
-            })
+            return ActionResult(
+                messages=[BotMessage(text=f"没有查到属于当前用户的订单 {order_number}，请确认订单号是否正确。")],
+                slot_updates={"order_found": False},
+            )
 
         order = payload.get("order") or {}
         items = payload.get("items") or []
@@ -44,6 +52,7 @@ class LookupOrderAction(Action):
                 parts.append("购买：" + "、".join(names[:3]))
 
         return ActionResult(slot_updates={
+            "order_found": True,
             "order_status": status_cn,
             "order_summary": "；".join(parts) + "。",
             "order_id": str(order.get("orderId") or order_number),
