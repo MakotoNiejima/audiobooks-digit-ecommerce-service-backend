@@ -1,0 +1,61 @@
+# Environment variables and local secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging and build outputs
+build/
+dist/
+wheels/
+*.egg-info/
+*.egg
+
+# Tests, coverage, linting, and type checking
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+.coverage.*
+coverage/
+coverage.xml
+htmlcov/
+
+# IDE and editor settings
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Logs and runtime files
+logs/
+*.log
+*.pid
+*.pid.lock
+
+# Temporary/tool output
+.cache/
+.firecrawl/
+*.tmp
+*.temp
+.ipynb_checkpoints/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Keep uv.lock committed for reproducible installs.

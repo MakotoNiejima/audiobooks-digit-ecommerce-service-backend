@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>听书智能客服</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  :root{
+    --purple:#8B5CF6; --blue:#3B82F6; --pink:#EC4899;
+    --grad:linear-gradient(135deg,#8B5CF6 0%,#3B82F6 50%,#EC4899 100%);
+    --grad-soft:linear-gradient(135deg,#a78bfa 0%,#60a5fa 50%,#f472b6 100%);
+    --bg:#f6f7fb; --card:#ffffff; --line:#eceef5;
+    --txt:#1f2330; --sub:#8a90a2; --bubble-bot:#ffffff; --bubble-user:transparent;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none}
+  input,textarea{font-family:inherit}
+
+  /* ===== 登录页 ===== */
+  #login{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:#fff;overflow:hidden}
+  #login::before{content:"";position:absolute;top:-200px;left:-150px;width:520px;height:520px;
+    background:var(--grad);filter:blur(120px);opacity:.35;border-radius:50%}
+  #login::after{content:"";position:absolute;bottom:-200px;right:-150px;width:520px;height:520px;
+    background:var(--grad-soft);filter:blur(120px);opacity:.3;border-radius:50%}
+  .login-card{position:relative;z-index:1;width:360px;background:var(--card);
+    border:1px solid var(--line);border-radius:22px;padding:36px 32px;
+    box-shadow:0 20px 60px rgba(80,70,160,.12)}
+  .login-logo{width:64px;height:64px;border-radius:18px;background:var(--grad);
+    display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 14px;
+    box-shadow:0 10px 24px rgba(139,92,246,.4)}
+  .login-title{text-align:center;font-size:22px;font-weight:700;margin:0 0 4px;
+    background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .login-sub{text-align:center;color:var(--sub);font-size:13px;margin:0 0 26px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:500}
+  .field input{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;
+    font-size:15px;background:#fafbff;outline:none;transition:.15s}
+  .field input:focus{border-color:var(--purple);background:#fff;box-shadow:0 0 0 4px rgba(139,92,246,.12)}
+  .login-btn{width:100%;padding:13px;border-radius:12px;background:var(--grad);color:#fff;
+    font-size:15px;font-weight:600;box-shadow:0 8px 20px rgba(139,92,246,.35);transition:.15s}
+  .login-btn:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(139,92,246,.45)}
+  .login-hint{text-align:center;color:var(--sub);font-size:12px;margin-top:14px}
+  .login-err{color:var(--pink);font-size:12px;text-align:center;margin-top:8px;min-height:16px}
+
+  /* ===== 主界面 ===== */
+  #app{display:none;height:100%}
+  .layout{display:flex;height:100%}
+  /* 侧栏 */
+  .sidebar{width:268px;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;flex-shrink:0}
+  .side-head{padding:18px 16px 12px;display:flex;align-items:center;gap:10px}
+  .side-logo{width:36px;height:36px;border-radius:11px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 6px 14px rgba(139,92,246,.35)}
+  .side-title{font-weight:700;font-size:15px}
+  .side-new{margin:4px 12px 8px;padding:11px;border-radius:12px;background:var(--grad);color:#fff;font-size:14px;font-weight:600;box-shadow:0 6px 16px rgba(139,92,246,.3);display:flex;align-items:center;justify-content:center;gap:6px}
+  .side-new:hover{filter:brightness(1.05)}
+  .side-list{flex:1;overflow-y:auto;padding:4px 8px}
+  .side-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:11px;cursor:pointer;margin-bottom:2px;transition:.12s;position:relative}
+  .side-item:hover{background:#f4f5fb}
+  .side-item.active{background:linear-gradient(135deg,rgba(139,92,246,.12),rgba(236,72,153,.10))}
+  .side-item.active .side-name{color:var(--purple);font-weight:600}
+  .side-avatar{width:32px;height:32px;border-radius:10px;background:var(--grad-soft);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:600;flex-shrink:0}
+  .side-meta{flex:1;min-width:0}
+  .side-name{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .side-preview{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .side-del{position:absolute;right:8px;opacity:0;color:var(--sub);font-size:14px;background:none;padding:4px}
+  .side-item:hover .side-del{opacity:1}
+  .side-del:hover{color:var(--pink)}
+  .side-foot{padding:10px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--sub);display:flex;justify-content:space-between;align-items:center}
+  .side-logout{color:var(--sub);background:none;font-size:12px}
+  .side-logout:hover{color:var(--pink)}
+
+  /* 主区 */
+  .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+  .topbar{height:58px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0}
+  .top-left{display:flex;align-items:center;gap:10px}
+  .top-avatar{width:34px;height:34px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px}
+  .top-name{font-weight:600;font-size:15px}
+  .top-status{font-size:12px;color:#22c55e;margin-left:8px;display:flex;align-items:center;gap:4px}
+  .top-status::before{content:"";width:7px;height:7px;border-radius:50%;background:#22c55e}
+  .menu-btn{display:none;background:none;font-size:20px;color:var(--sub)}
+
+  .msgs{flex:1;overflow-y:auto;padding:24px 0}
+  .msgs-inner{max-width:760px;margin:0 auto;padding:0 20px}
+  .msg{display:flex;gap:10px;margin:14px 0;align-items:flex-start}
+  .msg.user{flex-direction:row-reverse}
+  .av{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;flex-shrink:0}
+  .av.bot{background:var(--grad);box-shadow:0 4px 10px rgba(139,92,246,.3)}
+  .av.user{background:var(--grad-soft)}
+  .bubble-wrap{display:flex;flex-direction:column;max-width:74%}
+  .msg.user .bubble-wrap{align-items:flex-end}
+  .bubble{padding:11px 15px;border-radius:16px;font-size:14.5px;line-height:1.65;white-space:pre-wrap;word-break:break-word;box-shadow:0 2px 8px rgba(80,70,160,.06)}
+  .msg.bot .bubble{background:#fff;border:1px solid var(--line);border-top-left-radius:5px}
+  .msg.user .bubble{background:var(--grad);color:#fff;border-top-right-radius:5px;box-shadow:0 6px 16px rgba(139,92,246,.28)}
+  .card{margin-top:8px;padding:12px 14px;border:1.5px solid #e4dcff;border-radius:14px;background:linear-gradient(135deg,#faf8ff,#f6fbff);cursor:pointer;transition:.15s;max-width:340px}
+  .card:hover{border-color:var(--purple);box-shadow:0 8px 20px rgba(139,92,246,.18);transform:translateY(-1px)}
+  .card-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .card-tag{font-size:11px;color:#fff;background:var(--grad);border-radius:6px;padding:2px 8px;font-weight:600}
+  .card-title{font-weight:600;font-size:14px}
+  .card-attrs{font-size:12px;color:var(--sub)}
+  .card-hint{font-size:11.5px;color:var(--purple);margin-top:6px}
+  .cursor{display:inline-block;width:7px;height:15px;background:var(--purple);margin-left:2px;vertical-align:middle;animation:blink 1s steps(2) infinite;border-radius:2px}
+  @keyframes blink{50%{opacity:0}}
+
+  /* 空状态 */
+  .empty{max-width:560px;margin:8vh auto;text-align:center}
+  .empty-logo{width:72px;height:72px;border-radius:22px;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 16px;box-shadow:0 14px 32px rgba(139,92,246,.35)}
+  .empty h2{font-size:20px;margin:0 0 6px}
+  .empty p{color:var(--sub);font-size:14px;margin:0 0 22px}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+  .chip{padding:10px 16px;background:#fff;border:1px solid var(--line);border-radius:20px;font-size:13.5px;color:var(--txt);transition:.15s}
+  .chip:hover{border-color:var(--purple);color:var(--purple);background:#faf8ff;transform:translateY(-1px)}
+
+  /* 输入区 */
+  .composer{flex-shrink:0;background:#fff;border-top:1px solid var(--line);padding:14px 20px}
+  .composer-inner{max-width:760px;margin:0 auto;display:flex;gap:10px;align-items:flex-end;background:#fafbff;border:1.5px solid var(--line);border-radius:16px;padding:8px 8px 8px 14px;transition:.15s}
+  .composer-inner:focus-within{border-color:var(--purple);background:#fff;box-shadow:0 0 0 4px rgba(139,92,246,.1)}
+  #text{flex:1;border:none;outline:none;background:transparent;font-size:15px;line-height:1.5;resize:none;max-height:120px;padding:6px 0}
+  .send-btn{width:38px;height:38px;border-radius:11px;background:var(--grad);color:#fff;font-size:17px;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px rgba(139,92,246,.35);transition:.15s}
+  .send-btn:hover{transform:scale(1.05)}
+  .send-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+  /* 滚动条 */
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#d8dbe6;border-radius:8px}
+  ::-webkit-scrollbar-thumb:hover{background:#c0c4d4}
+
+  @media(max-width:760px){
+    .sidebar{position:fixed;left:0;top:0;bottom:0;z-index:20;transform:translateX(-100%);transition:.2s;box-shadow:0 0 40px rgba(0,0,0,.15)}
+    .sidebar.open{transform:none}
+    .menu-btn{display:block}
+    .bubble-wrap{max-width:84%}
+  }
+</style>
+</head>
+<body>
+
+<!-- 登录页 -->
+<div id="login">
+  <div class="login-card">
+    <div class="login-logo">🎧</div>
+    <h1 class="login-title">听书智能客服</h1>
+    <p class="login-sub">有问题，随时问我</p>
+    <form id="loginForm">
+      <div class="field">
+        <label>账户名（即用户ID）</label>
+        <input id="loginAccount" placeholder="例如：2" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label>密码</label>
+        <input id="loginPassword" type="password" placeholder="随便填即可" />
+      </div>
+      <div class="login-err" id="loginErr"></div>
+      <button class="login-btn" type="submit">进 入</button>
+      <div class="login-hint">测试账户：2（订单/退款）· 3（退款）· 1（播放进度）</div>
+    </form>
+  </div>
+</div>
+
+<!-- 主界面 -->
+<div id="app">
+  <div class="layout">
+    <aside class="sidebar" id="sidebar">
+      <div class="side-head">
+        <div class="side-logo">🎧</div>
+        <div class="side-title">听书智能客服</div>
+      </div>
+      <button class="side-new" id="btnNew">＋ 新建会话</button>
+      <div class="side-list" id="sideList"></div>
+      <div class="side-foot">
+        <span id="footAccount"></span>
+        <button class="side-logout" id="btnLogout">退出登录</button>
+      </div>
+    </aside>
+
+    <section class="main">
+      <div class="topbar">
+        <div class="top-left">
+          <button class="menu-btn" id="btnMenu">☰</button>
+          <div class="top-avatar">🎧</div>
+          <div>
+            <div class="top-name">听书智能客服</div>
+          </div>
+          <span class="top-status">在线</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="top-avatar" id="userAvatar" style="width:30px;height:30px;font-size:13px">U</div>
+          <span style="font-size:13px;color:var(--sub)">用户 <b id="topUserId" style="color:var(--txt)"></b></span>
+        </div>
+      </div>
+
+      <div class="msgs" id="msgs">
+        <div class="msgs-inner" id="msgsInner"></div>
+      </div>
+
+      <div class="composer">
+        <div class="composer-inner">
+          <textarea id="text" rows="1" placeholder="输入消息，回车发送…"></textarea>
+          <button class="send-btn" id="btnSend">➤</button>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const LS_SESSIONS = 'audiobook_sessions';   // [{account}]
+const LS_CURRENT = 'audiobook_current';
+
+let sessions = JSON.parse(localStorage.getItem(LS_SESSIONS) || '[]');
+let current = localStorage.getItem(LS_CURRENT) || null;
+let streaming = false;
+let streamingBubble = null;
+
+/* ---------- 登录 ---------- */
+$('loginForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const acc = $('loginAccount').value.trim();
+  if (!acc) { $('loginErr').textContent = '请输入账户名'; return; }
+  $('loginErr').textContent = '';
+  if (!sessions.find(s => s.account === acc)) sessions.push({ account: acc });
+  current = acc;
+  saveSessions();
+  enterApp();
+});
+
+function saveSessions(){ localStorage.setItem(LS_SESSIONS, JSON.stringify(sessions)); }
+function saveCurrent(){ localStorage.setItem(LS_CURRENT, current); }
+
+function enterApp(){
+  $('login').style.display = 'none';
+  $('app').style.display = 'block';
+  renderSidebar();
+  selectSession(current);
+}
+
+/* ---------- 侧栏 ---------- */
+function renderSidebar(){
+  const list = $('sideList');
+  list.innerHTML = '';
+  sessions.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'side-item' + (s.account === current ? ' active' : '');
+    item.innerHTML = `
+      <div class="side-avatar">${s.account.slice(0,1).toUpperCase()}</div>
+      <div class="side-meta">
+        <div class="side-name">用户 ${s.account}</div>
+        <div class="side-preview">点击进入会话</div>
+      </div>
+      <button class="side-del" title="删除">✕</button>`;
+    item.onclick = () => selectSession(s.account);
+    item.querySelector('.side-del').onclick = e => { e.stopPropagation(); deleteSession(s.account); };
+    list.appendChild(item);
+  });
+  $('footAccount').textContent = '当前：用户 ' + (current || '-');
+}
+
+$('btnNew').onclick = () => {
+  const acc = prompt('输入新的账户名（用户ID，例如 3）');
+  if (!acc) return;
+  if (!sessions.find(s => s.account === acc)) sessions.push({ account: acc });
+  saveSessions();
+  current = acc; saveCurrent();
+  renderSidebar(); selectSession(current);
+};
+
+function deleteSession(acc){
+  sessions = sessions.filter(s => s.account !== acc);
+  saveSessions();
+  if (current === acc){
+    current = sessions.length ? sessions[0].account : null;
+    saveCurrent();
+    if (current) selectSession(current); else { $('app').style.display='none'; $('login').style.display='flex'; }
+  } else renderSidebar();
+}
+
+$('btnLogout').onclick = () => {
+  localStorage.removeItem(LS_CURRENT);
+  current = null;
+  $('app').style.display = 'none';
+  $('login').style.display = 'flex';
+  $('loginAccount').value = '';
+  $('loginPassword').value = '';
+};
+
+$('btnMenu').onclick = () => $('sidebar').classList.toggle('open');
+
+/* ---------- 会话切换 ---------- */
+async function selectSession(acc){
+  current = acc; saveCurrent();
+  $('sidebar').classList.remove('open');
+  renderSidebar();
+  $('topUserId').textContent = acc;
+  $('userAvatar').textContent = acc.slice(0,1).toUpperCase();
+  $('msgsInner').innerHTML = '';
+  await loadHistory(acc);
+}
+
+async function loadHistory(acc){
+  try{
+    const r = await fetch('/api/chat/history?sender_id=' + encodeURIComponent(acc));
+    const data = await r.json();
+    const msgs = data.messages || [];
+    if (msgs.length === 0){ renderEmpty(); return; }
+    msgs.forEach(m => addMessage(m.role === 'user' ? 'user' : 'bot', m.text, m.object));
+  }catch(e){ addMessage('bot','拉取历史失败：'+e.message); }
+}
+
+function renderEmpty(){
+  const el = document.createElement('div');
+  el.className = 'empty';
+  el.innerHTML = `
+    <div class="empty-logo">🎧</div>
+    <h2>你好，用户 ${current}</h2>
+    <p>我是听书智能客服，查订单、查播放进度、退款、推荐有声书都可以找我</p>
+    <div class="chips">
+      <div class="chip">帮我查订单 ORD000000000002</div>
+      <div class="chip">推荐几本高评分有声书</div>
+      <div class="chip">我最近听到哪了</div>
+      <div class="chip">我要退款</div>
+    </div>`;
+  el.querySelectorAll('.chip').forEach(c => c.onclick = () => { $('text').value = c.textContent; send(); });
+  $('msgsInner').appendChild(el);
+}
+
+/* ---------- 消息渲染 ---------- */
+function addMessage(role, text, obj){
+  const empty = $('msgsInner').querySelector('.empty'); if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = `<div class="av ${role}">${role === 'bot' ? '🎧' : (current||'U').slice(0,1).toUpperCase()}</div><div class="bubble-wrap"></div>`;
+  const wrap = div.querySelector('.bubble-wrap');
+  if (text){
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    b.textContent = text;
+    wrap.appendChild(b);
+  }
+  if (obj) wrap.appendChild(renderCard(obj, role));
+  $('msgsInner').appendChild(div);
+  scrollBottom();
+  return wrap;
+}
+
+function renderCard(obj, role){
+  const card = document.createElement('div');
+  card.className = 'card';
+  const typeLabel = { order: '订单', audiobook: '有声书' }[obj.type] || obj.type;
+  const title = obj.title || obj.id;
+  let attrs = '';
+  if (obj.attributes) attrs = Object.entries(obj.attributes).filter(([,v]) => v).map(([k,v]) => `${k}=${v}`).join(' · ');
+  card.innerHTML = `<div class="card-head"><span class="card-tag">${typeLabel}</span><span class="card-title"></span></div><div class="card-attrs"></div>`;
+  card.querySelector('.card-title').textContent = title;
+  card.querySelector('.card-attrs').textContent = attrs;
+  if (role === 'bot'){
+    const hint = document.createElement('div');
+    hint.className = 'card-hint';
+    hint.textContent = '点击此卡片对该' + typeLabel + '发起后续操作（如退款）';
+    card.appendChild(hint);
+    card.onclick = () => sendObject(obj);
+  }
+  return card;
+}
+
+function startStreamBubble(){
+  const wrap = addMessage('bot', '', null);
+  const b = document.createElement('div');
+  b.className = 'bubble';
+  const cur = document.createElement('span');
+  const caret = document.createElement('span'); caret.className = 'cursor';
+  b.appendChild(cur); b.appendChild(caret);
+  wrap.appendChild(b);
+  streamingBubble = cur;
+  scrollBottom();
+}
+
+function scrollBottom(){ const m = $('msgs'); m.scrollTop = m.scrollHeight; }
+
+/* ---------- SSE 流式 ---------- */
+function handleEvent(ev){
+  if (ev.type === 'token'){
+    if (!streamingBubble) startStreamBubble();
+    streamingBubble.textContent += ev.text;
+    scrollBottom();
+  } else if (ev.type === 'message'){
+    streamingBubble = null;
+    addMessage('bot', ev.text, ev.object);
+  } else if (ev.type === 'error'){
+    streamingBubble = null;
+    addMessage('bot', ev.text || '出错了');
+  } else if (ev.type === 'done'){
+    // 去掉残留光标
+    document.querySelectorAll('.cursor').forEach(c => c.remove());
+    streamingBubble = null;
+  }
+}
+
+async function postStream(payload){
+  const resp = await fetch('/api/chat/stream', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+  });
+  if (!resp.ok || !resp.body){ addMessage('bot','请求失败：'+resp.status); return; }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buf = '';
+  while(true){
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, {stream:true});
+    let idx;
+    while((idx = buf.indexOf('\n\n')) !== -1){
+      const block = buf.slice(0, idx); buf = buf.slice(idx+2);
+      const line = block.split('\n').find(l => l.startsWith('data:'));
+      if (!line) continue;
+      try{ handleEvent(JSON.parse(line.slice(5).trim())); }catch(e){}
+    }
+  }
+  document.querySelectorAll('.cursor').forEach(c => c.remove());
+  streamingBubble = null;
+}
+
+/* ---------- 发送 ---------- */
+async function send(){
+  if (streaming) return;
+  const text = $('text').value.trim();
+  if (!text) return;
+  addMessage('user', text, null);
+  $('text').value = '';
+  autoSize();
+  streaming = true;
+  $('btnSend').disabled = true;
+  try{ await postStream({ sender_id: current, text }); }
+  catch(e){ addMessage('bot','请求失败：'+e.message); }
+  finally{ streaming = false; $('btnSend').disabled = false; }
+}
+
+async function sendObject(obj){
+  if (streaming) return;
+  addMessage('user', null, obj);
+  streaming = true; $('btnSend').disabled = true;
+  try{ await postStream({ sender_id: current, object: obj }); }
+  catch(e){ addMessage('bot','请求失败：'+e.message); }
+  finally{ streaming = false; $('btnSend').disabled = false; }
+}
+
+$('btnSend').onclick = send;
+$('text').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+$('text').addEventListener('input', autoSize);
+function autoSize(){ const t = $('text'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 120) + 'px'; }
+
+/* ---------- 启动 ---------- */
+if (current && sessions.length){ enterApp(); }
+</script>
+</body>
+</html>
