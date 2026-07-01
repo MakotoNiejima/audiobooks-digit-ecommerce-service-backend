@@ -21,6 +21,7 @@ dist/
 wheels/
 *.egg-info/
 *.egg
+项目实战说明-掌柜小二.txt
 
 # Tests, coverage, linting, and type checking
 .pytest_cache/
